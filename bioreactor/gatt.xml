@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration>
+
+    <service uuid="1800">
+      <description>Generic Access Profile</description>
+
+      <characteristic uuid="2a00">
+		<description>Device Name</description>
+        <properties read="true" const="true" />
+        <value>Bio1</value>
+      </characteristic>
+
+      <characteristic uuid="2a01">
+		<description>Appearance</description>
+        <properties read="true" const="true" />
+        <value type="hex">0003</value>
+      </characteristic>
+    </service>
+
+    <service type="primary" uuid="180A" id="manufacturer">
+        <characteristic uuid="2A29">
+            <description>Manufacturer Name</description>
+			<properties read="true" const="true" />
+            <value>MTU Biosensors</value>
+        </characteristic>
+		<characteristic uuid="2A24">
+			<description>Model</description>
+			<properties read="true" const="true" />
+			<value>Bioreactor pH</value>
+		</characteristic>
+		<characteristic uuid="2A27">
+			<description>Hardware Revision</description>
+			<properties read="true" const="true" />
+			<value>pH2.2.0R</value>
+		</characteristic>
+		<characteristic uuid="2A28">
+			<description>Software Revision</description>
+			<properties read="true" const="true" />
+			<value>3.15.18</value>
+		</characteristic>
+    </service>
+	
+	<service uuid="a451a318-a828-484f-9011-5f8accbf6480" advertise="true">
+		<description>MTU Biosensors Service</description>
+		<characteristic uuid="ac3574c6-5120-11e7-b114-b2f933d5fe66" id="gatt_data">
+			<description>Data</description>
+			<properties indicate="true"/>
+			<value length="2" type="hex">0</value>
+		</characteristic>
+		<characteristic uuid="741e32a6-70a4-11e7-857b-a6006ad3dba0" id="gatt_temp">
+			<description>Temperature</description>
+			<properties indicate="true"/>
+			<value length = "2" type="hex"/>
+		</characteristic>
+		<characteristic uuid="751e32a6-70a4-11e7-857b-a6006ad3dba0" id="gatt_power">
+			<description>Power</description>
+			<properties indicate="true"/>
+			<value length = "2" type="hex"/>
+		</characteristic>
+		<characteristic uuid="932216ba-75ef-46fa-892b-e48adeac975b" id="gatt_control">
+			<description>Control</description>
+			<properties read="true" write="true"/>
+			<value length="1" type="hex">00</value>
+		</characteristic>
+		<characteristic uuid="932216ba-0000-11e7-0000-e48adeac975c" id="gatt_calibrate">
+			<description>Calibrate</description>
+			<properties read="true" write="true"/>
+			<value length="4" type="hex">FFFFFFFF</value>
+		</characteristic>
+		<characteristic uuid="2f4eba3c-c0a5-11e7-abc4-cec278b6b50a" id="gatt_ph">
+			<description>pH</description>
+		</characteristic>
+	</service>
+</configuration>

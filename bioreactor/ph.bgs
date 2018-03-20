@@ -1,0 +1,185 @@
+#### PH Sensor v2.0 ###############################################################
+# Author: Brad Nelson
+# Date: 3-15-2018
+###################################################################################################
+
+# Hardware ports/pins
+const ADC_PH = 0
+const ADC_TEMP = 2
+const ADC_POWER = 3
+const GPIO_ENABLE_PORT = 2
+const GPIO_ENABLE_PIN = $01
+# Control
+const CONTROL_WAKE_BIT = $01
+const CONTROL_RESET_BIT = $10
+# Variables
+const DATA_SEC = 5
+const STATUS_SEC = 60
+
+dim dataPeriod
+dim statusPeriod
+dim dataPacket(2)
+dim tempPacket(2)
+dim powerPacket(2)
+dim dataPending
+dim tempPending
+dim powerPending
+dim length
+dim data(4)
+
+#### Sensor Sleep #################################################################################
+procedure sensor_sleep()
+	call hardware_io_port_write(GPIO_ENABLE_PORT, GPIO_ENABLE_PIN, $00) # Disable regulator
+	call hardware_set_soft_timer(0,0,1) # Disable timers
+	call hardware_set_soft_timer(0,1,1)
+end
+
+#### Sensor Wake ##################################################################################
+procedure sensor_wake()
+	call hardware_io_port_write(GPIO_ENABLE_PORT, GPIO_ENABLE_PIN, $FF) # Enable regulator
+	call hardware_set_soft_timer(dataPeriod,0,1) # Enable timers
+	call hardware_set_soft_timer(statusPeriod,1,1)
+	call hardware_adc_read(ADC_TEMP,3,2)
+	call hardware_adc_read(ADC_POWER,3,2)
+end
+
+#### System Boot ##################################################################################
+event system_boot(major, minor, patch, build, ll_version, protocol_version, hw)
+	# Initialize variables
+	dataPeriod = 32768 * DATA_SEC
+	statusPeriod = 32768 * STATUS_SEC
+	
+	dataPending = 0
+	tempPending = 0
+	powerPending = 0
+	
+	# Check flash memory
+	call flash_read_data(0,4)(length,data(0:4))
+	call attributes_write(gatt_calibrate,0,4,data(0:4))
+	
+	# Start advertising in connectable mode
+	call gap_set_adv_parameters(1600,1600,$07)
+    call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+	
+	# Configure GPIO
+	call hardware_io_port_config_direction(GPIO_ENABLE_PORT, GPIO_ENABLE_PIN)
+	call hardware_io_port_write(GPIO_ENABLE_PORT, GPIO_ENABLE_PIN, $00)
+end
+
+#### Timer Interrupt Handler ######################################################################
+event hardware_soft_timer(handle)
+	if handle = 0 then
+		call hardware_adc_read(ADC_PH,3,2)
+		
+		# Restart timer
+		call hardware_set_soft_timer(dataPeriod,0,1)
+	end if
+	
+	if handle = 1 then
+		call hardware_adc_read(ADC_TEMP,3,2)
+		call hardware_adc_read(ADC_POWER,3,2)
+		
+		# Restart timer
+		call hardware_set_soft_timer(statusPeriod,1,1)
+	end if
+end
+
+#### ADC Interrupt Handler ########################################################################
+event hardware_adc_result(input,value)
+
+	# Handle ADC - PH Measurement
+	if input = ADC_PH then
+		# ADC value >> 4
+		dataPacket(0:2) = value / 16
+		
+		call attributes_write(gatt_data,0,2,dataPacket(0:2))
+		dataPending = 1
+	end if
+	
+	# Handle ADC - Temperature
+	if input = ADC_TEMP then
+		tempPacket(0:2) = value / 16
+		
+		call attributes_write(gatt_temp,0,2,tempPacket(0:2))
+		tempPending = 1
+	end if
+	
+	# Handle ADC - Power
+	if input = ADC_POWER then
+		powerPacket(0:2) = value / 16
+		
+		call attributes_write(gatt_power,0,2,powerPacket(0:2))
+		powerPending = 1
+	end if
+end
+
+#### ATT Client Indicated #########################################################################
+event attclient_indicated(connection, attrhandle)
+	if attrhandle = gatt_data then
+		dataPending = 0
+		
+		if tempPending > 0 then
+			call attributes_write(gatt_temp,0,2,tempPacket(0:2))
+		end if
+		if powerPending > 0 then
+			call attributes_write(gatt_power,0,2,powerPacket(0:2))
+		end if
+	end if
+	
+	if attrhandle = gatt_temp then
+		tempPending = 0
+		
+		if dataPending > 0 then
+			call attributes_write(gatt_data,0,2,dataPacket(0:2))
+		end if
+		if powerPending > 0 then
+			call attributes_write(gatt_power,0,2,powerPacket(0:2))
+		end if
+	end if
+	
+	if attrhandle = gatt_power then
+		powerPending = 0
+		
+		if dataPending > 0 then
+			call attributes_write(gatt_data,0,2,dataPacket(0:2))
+		end if
+		if tempPending > 0 then
+			call attributes_write(gatt_temp,0,2,tempPacket(0:2))
+		end if
+	end if
+end
+
+#### GATT Update Handler ##########################################################################
+event attributes_value(connection, reason, handle, offset, value_len, value_data)
+	
+	# Control register:
+	# Bit 0:	Sleep/Wake
+	# Bit 4:	Reset
+	if handle = gatt_control then
+		# Sleep/Wake Control
+		if (value_data(0:1) & CONTROL_WAKE_BIT) = CONTROL_WAKE_BIT then # Wake
+			call sensor_wake()
+		end if
+		if (value_data(0:1) & CONTROL_WAKE_BIT) = $00 then # Sleep
+			call sensor_sleep()
+		end if
+		
+		# Reset Control
+		if (value_data(0:1) & CONTROL_RESET_BIT) = CONTROL_RESET_BIT then
+			call system_reset(0)	# Reset
+		end if
+	end if
+	
+	# Recalibration
+	if handle = gatt_calibrate then
+		call flash_erase_page(0)
+		call flash_write_data(0,4,value_data(0:4))
+	end if
+end
+
+#### Disconnect Handler ###########################################################################
+event connection_disconnected(connection,reason)
+    
+	# Start advertising again immediately
+    call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+end
