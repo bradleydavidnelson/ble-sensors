@@ -1,0 +1,155 @@
+#### Georgia Tech Strain Gauge v2.0 ###############################################################
+# Author: Brad Nelson
+#
+# P0.0: ADC0: Strain Gauge
+# P0.0: ADC1: Thermistor (not connected)
+# P1.0: GPIO: Regulator Enable
+###################################################################################################
+
+# Variables
+const DATA_HZ = 30 	# in Hz
+const STATUS_SEC = 5# in seconds
+
+dim dataPeriod
+dim statusPeriod
+dim dataPacket(4)
+dim statusPacket(4)
+dim index
+
+procedure sensor_sleep()
+	call hardware_io_port_write(1, $01, $00) # Disable regulator
+	call hardware_set_soft_timer(0,0,0) # Disable timers
+	call hardware_set_soft_timer(0,1,0)
+end
+
+procedure sensor_wake()
+	call hardware_io_port_write(1, $01, $01) # Enable regulator
+	call hardware_adc_read(14,3,0)	# Read status temp
+	#call hardware_adc_read(1,3,2)	# Read status rail
+	call hardware_set_soft_timer(dataPeriod,0,0) # Enable timers
+	call hardware_set_soft_timer(statusPeriod,1,1)
+end
+
+#### System Boot ##################################################################################
+# major				Major software version
+# minor				Minor software version
+# patch				Patch ID
+# build				Build version
+# ll_version		Link layer version
+# protocol_version	BGAPI protocol version
+# hw				Hardware version
+###################################################################################################
+event system_boot(major, minor, patch, build, ll_version, protocol_version, hw)
+	
+	# Initialize variables
+	dataPeriod = 32768/DATA_HZ
+	statusPeriod = 32768*STATUS_SEC
+	index = 0
+	
+	# Start advertising in connectable mode
+    call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+	
+	# Configure GPIO - P1.0 as output
+	call hardware_io_port_config_direction(1, $01)
+	
+	# Disable peripheral power
+	call hardware_io_port_write(1, $01, $00)
+end
+
+#### Timer Interrupt Handler ######################################################################
+# handle			The software timer handle
+###################################################################################################
+event hardware_soft_timer(handle)
+	
+	# Timer 0
+	if handle = 0 then
+		call hardware_adc_read(0,3,2)
+		call hardware_adc_read(1,3,2)
+	end if
+	
+	# Timer 1
+	if handle = 1 then
+		call hardware_adc_read(1,3,2)
+		call hardware_adc_read(14,3,0)
+	end if
+end
+
+#### ADC Interrupt Handler ########################################################################
+# input				The ADC input
+# value				A/D value
+###################################################################################################
+event hardware_adc_result(input,value)
+
+	# Handle ADC0
+	if input = 0 then
+		# ADC value >> 4
+		dataPacket(0:2) = value / 16
+	end if
+	
+	# Handle ADC1
+	if input = 1 then
+		dataPacket(2:2) = value / 16
+	end if
+	
+	# Handle ADC14
+	if input = 14 then
+		statusPacket(0:2) = value / 16
+	end if
+	
+	# Handle data packet
+	if dataPacket(0:2) != 0 then
+		if dataPacket(2:2) != 0 then
+			call attributes_write(gatt_packet, 0, 4, dataPacket(0:4))
+			dataPacket(0:4) = 0
+		end if
+	end if
+	
+	# Handle status packet
+	if statusPacket(0:2) != 0 then
+		call attributes_write(gatt_status,0,2,statusPacket(0:2))
+		call hardware_set_soft_timer(statusPeriod,1,1)
+		
+		statusPacket(0:2) = 0
+	end if
+end
+
+#### GATT Update Handler ##########################################################################
+# connection		Connection handle
+# reason			Reason why value has changed (see API documentation)
+# handle			Attribute handle which was changed
+# offset			Offset into attribute value where data starts
+# value_len			Length of attribute value
+# value_data		Attribute value
+###################################################################################################
+event attributes_value(connection, reason, handle, offset, value_len, value_data)
+	
+	# Control register:
+	# Bit 0:	Sleep/Wake
+	# Bit 1-3:	Not Used
+	# Bit 4:	Reset
+	# Bit 5-7:	Not Used
+	if handle = gatt_control then
+		# Reset Control
+		if (value_data(0:1) & $10) = $10 then
+			call system_reset(0)	# Reset
+		end if
+		
+		# Sleep/Wake Control
+		if (value_data(0:1) & $01) = $00 then # Sleep
+			call sensor_sleep()
+		end if
+		if (value_data(0:1) & $01) = $01 then # Wake
+			call sensor_wake()
+		end if
+	end if
+end
+
+#### Disconnect Handler ###########################################################################
+# connection		Connection handle
+# reason			Disconnect reason code (see API documentation)
+###################################################################################################
+event connection_disconnected(connection,reason)
+    
+	# Start advertising again immediately
+    call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+end

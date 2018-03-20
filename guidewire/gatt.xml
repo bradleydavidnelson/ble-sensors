@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration>
+
+    <service uuid="1800">
+      <description>Generic Access Profile</description>
+
+      <characteristic uuid="2a00">
+		<description>Device Name</description>
+        <properties read="true" const="true" />
+        <value>GW2</value>
+      </characteristic>
+
+      <characteristic uuid="2a01">
+		<description>Appearance</description>
+        <properties read="true" const="true" />
+        <value type="hex">0003</value>
+      </characteristic>
+    </service>
+
+    <service type="primary" uuid="180A" id="manufacturer">
+        <characteristic uuid="2A29">
+            <description>Manufacturer Name</description>
+			<properties read="true" const="true" />
+            <value>MTU Biosensors</value>
+        </characteristic>
+    </service>
+	
+	<service uuid="a451a318-a828-484f-9011-5f8accbf6480" advertise="true">
+		<description>MTU Biosensors Service</description>
+		<characteristic uuid="ac3574c6-5120-11e7-b114-b2f933d5fe66" id="gatt_packet">
+			<description>Data Packet</description>
+			<properties indicate="true"/>
+			<value length="8" type="hex">0</value>
+		</characteristic>
+		<characteristic uuid="932216ba-75ef-46fa-892b-e48adeac975b" id="gatt_control">
+			<description>Sleep/Wake</description>
+			<properties read="true" write="true"/>
+			<value length="1" type="hex">00</value>
+		</characteristic>
+		<characteristic uuid="741e32a6-70a4-11e7-857b-a6006ad3dba0" id="gatt_status">
+			<description>Status Packet</description>
+			<properties indicate="true"/>
+			<value length="4" type="hex">0</value>
+		</characteristic>
+	</service>
+</configuration>
