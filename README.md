@@ -2,10 +2,10 @@
 >Wireless sensors designed in the Ong Lab at the University of Oregon.
 ---
 ## Table of Contents
-- [Getting Started](#getting-started)
-- [Usage](#usage)
-- [Contributors](#contributors)
-- [License](#license)
+1. [Getting Started](#getting-started)
+1. [Usage](#usage)
+1. [Contributors](#contributors)
+1. [License](#license)
 ---
 ## Getting Started
 The following files are provided by Silicon Labs. A Silicon Labs account is required for download, and may be created for free.
