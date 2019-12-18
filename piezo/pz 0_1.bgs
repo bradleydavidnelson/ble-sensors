@@ -1,0 +1,266 @@
+#### Piezoelectric Actuator ####################################################
+# Author: Brad Nelson
+# Version: 0.1
+# Updated: 4/23/19
+#
+# Complete:
+# Actuation?
+# Pz Sensing
+
+# Incomplete:
+# Data pending for indications
+################################################################################
+
+# Hardware ports/pins
+# Port 0
+const ADC_BAT_PIN = $01
+const ADC_PZ_PIN = $02
+# Port 1
+const CHARGE_PIN = $01
+const BAT_SW_PIN = $02
+const ACT_EN_PIN = $04
+const SEN_EN_PIN = $08
+# I2C
+const DRV2667 = $B2
+
+# Software Constants
+const ACT_FREQ = 35
+const SENSE_FREQ = 30
+const POLLING_COUNTER_MAX = 30
+
+# Variables
+dim cycles(2)
+dim adData(6)
+dim data(1)
+dim dataPacket(20)
+dim pollingPeriod
+dim pollingCounter
+dim pzPeriod
+dim null
+dim packetIndex
+
+################################################################################
+# Turn on boost converter
+procedure enable_boost()
+  # Enable boost
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x02")
+end
+
+################################################################################
+# Turn off boost converter
+procedure disable_boost()
+  # Disable boost
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x00")
+end
+
+procedure set_ad_data(charging)
+  # Discoverable/Connectable
+  adData(0:1) = 2
+  adData(1:1) = gap_ad_type_flags
+  adData(2:1) = $06
+
+  # Charging
+  adData(3:1) = 2
+  adData(4:1) = $40 #custom charging handle
+  adData(5:1) = charging
+
+  call gap_set_adv_data(0, 6, adData(0:6))
+end
+
+################################################################################
+# 5 second waveform
+procedure wavegen(duration)
+
+  cycles(0:1) = "\x08"
+  cycles(1:1) = duration
+
+  # Control
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x01\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x03\x01")
+  call hardware_i2c_write(DRV2667,1,2,"\x04\x00")
+  # Header
+  call hardware_i2c_write(DRV2667,1,2,"\xFF\x01")
+  call hardware_i2c_write(DRV2667,1,2,"\x00\x05")
+  call hardware_i2c_write(DRV2667,1,2,"\x01\x80")
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x06")
+  call hardware_i2c_write(DRV2667,1,2,"\x03\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x04\x09")
+  call hardware_i2c_write(DRV2667,1,2,"\x05\x9D") # Run for 5 sec
+  # Data
+  call hardware_i2c_write(DRV2667,1,2,"\x06\xCC")
+  call hardware_i2c_write(DRV2667,1,2,"\x07\x04")
+  call hardware_i2c_write(DRV2667,1,2, cycles(0:2)) # 2 cycles
+  call hardware_i2c_write(DRV2667,1,2,"\x09\x00")
+  # Control
+  call hardware_i2c_write(DRV2667,1,2,"\xFF\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x01")
+end
+
+################################################################################
+# 20 Minute waveform
+procedure long_waveform()
+  # Control
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x01\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x03\x01")
+  call hardware_i2c_write(DRV2667,1,2,"\x04\x00")
+  # Header
+  call hardware_i2c_write(DRV2667,1,2,"\xFF\x01")
+  call hardware_i2c_write(DRV2667,1,2,"\x00\x05")
+  call hardware_i2c_write(DRV2667,1,2,"\x01\x80")
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x06")
+  call hardware_i2c_write(DRV2667,1,2,"\x03\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x04\x09")
+  call hardware_i2c_write(DRV2667,1,2,"\x05\x9D") # Run for 5 sec
+  # Data
+  call hardware_i2c_write(DRV2667,1,2,"\x06\xCC")
+  call hardware_i2c_write(DRV2667,1,2,"\x07\x04")
+  call hardware_i2c_write(DRV2667,1,2,"\x08\xF0") # cycles
+  call hardware_i2c_write(DRV2667,1,2,"\x09\x00")
+  # Control
+  call hardware_i2c_write(DRV2667,1,2,"\xFF\x00")
+  call hardware_i2c_write(DRV2667,1,2,"\x02\x01")
+end
+
+################################################################################
+# System Boot Event
+event system_boot(major, minor, patch, build, ll_version, protocol_version, hw)
+  # Define variables
+  pzPeriod = 32768 / SENSE_FREQ
+  pollingPeriod = 32768
+
+  #call set_ad_data(0)
+
+  # Start advertising in connectable mode
+	call gap_set_adv_parameters( 1600, 1600, $07)
+  call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+
+  # Configure GPIO
+	call hardware_io_port_config_direction( 1, $0E)
+	call hardware_io_port_write( 1, $0E, $01)
+end
+
+################################################################################
+# Attributes Value Event
+event attributes_value(connection, reason, handle, offset, value_len, value_data)
+	# Digital Potentiometer control
+	if handle = pz_drv_ctrl then
+		if (value_data(0:1)) = $00
+			call disable_boost()
+    else
+      if (value_data(0:1)) = $01
+        call enable_boost()
+      end if
+      if (value_data(0:1)) = $02
+        call wavegen(2)
+      end if
+      if (value_data(0:1)) = $04
+        call wavegen(240)
+      end if
+    end if
+	end if
+
+  # Piezo mode
+  # Configure relays and Timer0
+  if handle = pz_mode then
+
+    # 0 - Off
+    if (value_data(0:1)) = $00
+      call hardware_io_port_write( 1, ACT_EN_PIN + SEN_EN_PIN, $00)
+      call hardware_set_soft_timer( 0, 0, 1)
+    end if
+
+    # 1 - Actuation mode
+    if (value_data(0:1)) = $01
+		  call hardware_io_port_write( 1, ACT_EN_PIN + SEN_EN_PIN, ACT_EN_PIN)
+      call hardware_set_soft_timer( 0, 0, 1)
+    end if
+
+    # 2 - Sensing mode
+    if (value_data(0:1)) = $02
+      packetIndex = 0
+		  call hardware_io_port_write( 1, ACT_EN_PIN + SEN_EN_PIN, SEN_EN_PIN)
+      call hardware_set_soft_timer(pzPeriod, 0, 1)
+    end if
+  end if
+end
+
+################################################################################
+# Timer Interrupt
+event hardware_soft_timer(handle)
+  # Timer0 - piezoelectric sensing
+	if handle = 0 then
+		call hardware_adc_read(ADC_PZ_PIN, 3, 2)
+    # Restart timer
+		call hardware_set_soft_timer(pzPeriod, 0, 1)
+	end if
+
+  # Charge polling timer
+  if handle = 1 then
+    # Read charge pin
+    call hardware_io_port_read( 1, CHARGE_PIN)(null, null, data(0:1))
+    # Write charge state to server
+    call attributes_write(charge_state, 0, 1, data(0:1))
+
+    pollingCounter = pollingCounter + 1
+    if (pollingCounter > POLLING_COUNTER_MAX) then
+      pollingCounter = 0
+      # Enable battery monitor
+      call hardware_io_port_write( 1, BAT_SW_PIN, BAT_SW_PIN)
+      # Read battery voltage
+      call hardware_adc_read(ADC_BAT_PIN, 3, 2)
+    end if
+
+    # Reset timer
+		call hardware_set_soft_timer(pollingPeriod, 1, 1)  # Restart timer
+	end if
+end
+
+################################################################################
+# ADC Interrupt
+event hardware_adc_result(input,value)
+  # Piezoelectric ADC Pin
+  if input = ADC_PZ_PIN then
+    dataPacket(packetIndex:2) = value / 16
+    packetIndex = packetIndex + 2
+
+    if packetIndex >= 19 then
+      call attributes_write(pz_volt, 0, 20, dataPacket(0:20))
+      packetIndex = 0
+    end if
+  end if
+
+  # Battery ADC Pin
+	if input = ADC_BAT_PIN then
+    # Disable battery monitor
+    call hardware_io_port_write( 1, BAT_SW_PIN, 0)
+
+		# ADC value >> 4
+		dataPacket(0:2) = value / 16
+
+		call attributes_write(batt_voltage, 0, 1, dataPacket(0:2))
+	end if
+end
+
+################################################################################
+# Connection Status Event
+event connection_status(connection, flags, address, address_type, conn_interval, timeout, latency, bonding)
+  # Has a new connection been established
+  if (flags = $05) then
+    # Turn on timers
+    call hardware_set_soft_timer(pollingPeriod, 1, 1)
+    pollingCounter = POLLING_COUNTER_MAX
+  end if
+end
+
+################################################################################
+# Connection Disconnected Event
+event connection_disconnected(connection,reason)
+  # Turn off timers
+  call hardware_set_soft_timer( 0, 0, 1)
+  call hardware_set_soft_timer( 0, 1, 1)
+
+	# Begin advertising
+  call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+end

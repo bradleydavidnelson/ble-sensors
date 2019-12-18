@@ -1,0 +1,6 @@
+gatt_data 23
+gatt_temp 27
+gatt_rail 31
+gatt_control 35
+gatt_pot 38
+gatt_debug 41

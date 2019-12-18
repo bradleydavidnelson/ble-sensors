@@ -1,0 +1,8 @@
+gatt_data 23
+gatt_debug 27
+charge_state 31
+batt_voltage 34
+batt_temp 37
+pz_mode 42
+pz_drv_ctrl 44
+pz_volt 46

@@ -50,13 +50,13 @@ procedure sensor_wake()
 	call hardware_set_soft_timer(statusPeriod,1,1)
 	call hardware_adc_read(ADC_TEMP,3,2)	# Read status temp
 	call hardware_adc_read(ADC_RAIL,3,2)	# Read status rail
-	
+
 	# Disable write protection
 	written = 0
 	while written < 1
 		call hardware_i2c_write(I2C_AD5175, 1, 2, "\x1C\x03")(written)
 	end while
-	
+
 	pot(0:1) = position(0:1) | $04
 	pot(1:1) = position(1:1)
 	call hardware_i2c_write(I2C_AD5175, 1, 2, pot(0:2))
@@ -69,15 +69,15 @@ event system_boot(major, minor, patch, build, ll_version, protocol_version, hw)
 	statusPeriod = 32768 * STATUS_SEC
 	index = 0
 	position(0:2) = 0
-	
+
 	dataPending = 0
 	tempPending = 0
 	railPending = 0
-	
+
 	# Start advertising in connectable mode
 	call gap_set_adv_parameters(1600,1600,$07)
-    call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
-	
+  call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+
 	# Configure GPIO - P1.0 as output
 	call hardware_io_port_config_direction(GPIO_ENABLE_PORT, GPIO_ENABLE_PIN)
 
@@ -89,16 +89,16 @@ end
 event hardware_soft_timer(handle)
 	# Timer 0
 	if handle = 0 then
-		call hardware_adc_read(ADC_STRAIN,3,0)
-		
+		call hardware_adc_read(ADC_STRAIN,3,2)
+
 		call hardware_set_soft_timer(dataPeriod,0,1)
 	end if
-	
+
 	# Timer 1
 	if handle = 1 then
 		call hardware_adc_read(ADC_RAIL,3,2)
 		call hardware_adc_read(ADC_TEMP,3,2)
-		
+
 		call hardware_set_soft_timer(statusPeriod,1,1)
 	end if
 end
@@ -108,49 +108,45 @@ event hardware_adc_result(input,value)
 
 	# Handle ADC0
 	if input = ADC_STRAIN then
-		# ADC value >> 4
-#		dataPacket(index:2) = value / 16
-		dataPacket(0:2) = value / 16
-		
-		# Increment packet index
-#		index = index + 2
+		# Right shift value
+		dataPacket(index:2) = value / 16
 
-		call attributes_write(gatt_data,0,2,dataPacket(0:2))
-		dataPending = 1
+		# Increment packet index
+		index = index + 2
 	end if
-	
+
 	# Handle ADC1
 	if input = ADC_RAIL then
 		railPacket(0:2) = value / 16
-		
+
 		call attributes_write(gatt_rail,0,2,railPacket(0:2))
 		railPending = 1
 	end if
-	
+
 	# Handle ADC14
 	if input = ADC_TEMP then
 		tempPacket(0:2) = value / 16
-		
+
 		call attributes_write(gatt_temp,0,2,tempPacket(0:2))
 		tempPending = 1
 	end if
-	
+
 	# Is the data packet full?
-#	if index >= 19 then
-#		# Transmit data
-#		call attributes_write(gatt_data,0,20,dataPacket(0:20))
-#		dataPending = 1
-#		
-#		# Reset index
-#		index = 0
-#	end if
+	if index >= 19 then
+		# Transmit data
+		call attributes_write(gatt_data,0,20,dataPacket(0:20))
+		dataPending = 1
+
+		# Reset index
+		index = 0
+	end if
 end
 
 #### ATT Client Indicated #########################################################################
 event attclient_indicated(connection, attrhandle)
 	if attrhandle = gatt_data then
 		dataPending = 0
-		
+
 		if tempPending > 0 then
 			call attributes_write(gatt_temp,0,2,tempPacket(0:2))
 		end if
@@ -158,10 +154,10 @@ event attclient_indicated(connection, attrhandle)
 			call attributes_write(gatt_rail,0,2,railPacket(0:2))
 		end if
 	end if
-	
+
 	if attrhandle = gatt_temp then
 		tempPending = 0
-		
+
 		if dataPending > 0 then
 			call attributes_write(gatt_data,0,2,dataPacket(0:2))
 		end if
@@ -169,10 +165,10 @@ event attclient_indicated(connection, attrhandle)
 			call attributes_write(gatt_rail,0,2,railPacket(0:2))
 		end if
 	end if
-	
+
 	if attrhandle = gatt_rail then
 		railPending = 0
-		
+
 		if dataPending > 0 then
 			call attributes_write(gatt_data,0,2,dataPacket(0:2))
 		end if
@@ -188,12 +184,12 @@ event attributes_value(connection, reason, handle, offset, value_len, value_data
 	# Digital Potentiometer control
 	if handle = gatt_pot then
 		call hardware_i2c_write(I2C_AD5175, 1, 2, value_data(0:2))
-		
+
 		if (value_data(0:1) & $3C) = $04 then
 			position(0:1) = value_data(0:1) & $03
 			position(1:1) = value_data(1:1)
 		end if
-		
+
 		# for debugging
 		if (value_data(0:1) & $3C) = $08 then
 			call hardware_i2c_write(I2C_AD5175, 0, 2, value_data(0:2))
@@ -201,7 +197,7 @@ event attributes_value(connection, reason, handle, offset, value_len, value_data
 			call attributes_write(gatt_debug, 0, 2, position(0:2))
 		end if
 	end if
-	
+
 	# Control register:
 	# Bit 0:	Sleep/Wake
 	# Bit 1-3:	Not Used
@@ -212,7 +208,7 @@ event attributes_value(connection, reason, handle, offset, value_len, value_data
 		if (value_data(0:1) & CONTROL_RESET_BIT) = CONTROL_RESET_BIT then
 			call system_reset(0)	# Reset
 		end if
-		
+
 		# Sleep/Wake Control
 		if (value_data(0:1) & CONTROL_WAKE_BIT) = CONTROL_WAKE_BIT then
 			call sensor_wake()
@@ -225,7 +221,7 @@ end
 
 #### Disconnect Handler ###########################################################################
 event connection_disconnected(connection,reason)
-    
+
 	# Start advertising again immediately
     call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
 end

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration>
+  <service uuid="1800">
+    <description>Generic Access Profile</description>
+
+    <characteristic uuid="2a00">
+		  <description>Device Name</description>
+      <properties read="true" const="true" />
+      <value>Z3</value>
+    </characteristic>
+
+    <characteristic uuid="2a01">
+		  <description>Appearance</description>
+      <properties read="true" const="true" />
+      <value type="hex">0003</value>
+    </characteristic>
+  </service>
+
+  <service type="primary" uuid="180A" id="device_information">
+    <characteristic uuid="2A29">
+      <description>Manufacturer Name</description>
+			<properties read="true" const="true" />
+      <value>MTU Biosensors</value>
+    </characteristic>
+    <characteristic uuid="2A24">
+      <description>Model</description>
+			<properties read="true" const="true" />
+      <value>Piezoelectric Actuator</value>
+    </characteristic>
+    <characteristic uuid="2A27">
+			<description>Hardware Revision</description>
+			<properties read="true" const="true" />
+			<value>0.1</value>
+		</characteristic>
+    <characteristic uuid="2A28">
+    	<description>Software Revision</description>
+    	<properties read="true" const="true" />
+    	<value>0.1</value>
+    </characteristic>
+  </service>
+
+	<service uuid="a451a318-a828-484f-9011-5f8accbf6480" advertise="true">
+		<description>MTU Biosensors Service</description>
+		<characteristic uuid="ac3574c6-5120-11e7-b114-b2f933d5fe66" id="gatt_data">
+			<description>Data Packet</description>
+			<properties indicate="true"/>
+			<value length="20" type="hex">0</value>
+		</characteristic>
+		<characteristic uuid="77da051e-8378-11e7-bb31-be2e44b06b34" id="gatt_debug">
+			<description>Debug Packet</description>
+			<properties read="true" write="true"/>
+			<value length="2" type="hex"/>
+		</characteristic>
+	</service>
+
+  <!-- Battery Service-->
+  <service uuid="763b50b2-75a4-11e9-8f9e-2a86e4085a59" advertise="true">
+    <characteristic uuid="7d79ef76-7335-11e9-a923-1681be663d3e" id="charge_state">
+      <properties notify="true" read="true"/>
+      <value length="1">1</value>
+    </characteristic>
+    <characteristic uuid="7d79ef76-7335-11e9-a923-1681be663d3f" id="batt_voltage">
+      <properties notify="true" read="true" write="false"/>
+      <value length="2" type="hex">0</value>
+    </characteristic>
+    <characteristic uuid="741e32a6-70a4-11e7-857b-a6006ad3dba1" id="batt_temp">
+			<description>Temperature Packet</description>
+			<properties notify="true"/>
+			<value length = "2" type="hex"/>
+		</characteristic>
+  </service>
+
+  <!-- Piezoelectric Service-->
+  <service uuid="5ae2aec4-74b4-11e7-adc0-fa7ae01bbebc" advertise="true">
+    <!-- Piezo Mode -->
+    <characteristic uuid="a03eb832-74b4-11e8-adc0-fa7ae01bbebb" id="pz_mode">
+      <properties read="true" write="true"/>
+      <value length="1" type="hex">0</value><!-- 0x00=Off, 0x01=Actuate, 0x02=Sense, 0x03=Invalid -->
+    </characteristic>
+    <!-- Piezo Drive Control -->
+    <characteristic uuid="a03eb832-74b4-11e8-adc0-fa7ae01bbebc" id="pz_drv_ctrl">
+      <properties read="true" write="true"/>
+      <value length="1" type="hex">0</value>
+    </characteristic>
+    <!-- Piezo Voltage -->
+    <characteristic uuid="a03eb832-74b4-11e8-adc0-fa7ae01bbebd" id="pz_volt">
+      <properties indicate="true" read="true" write="false"/>
+      <value length="20" type="hex">0</value>
+    </characteristic>
+  </service>
+</configuration>
